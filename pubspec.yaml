@@ -12,7 +12,7 @@ dependencies:
   dotenv: ^4.2.0
   shelf_cors_headers: ^0.1.5
   json_annotation: ^4.8.1
-  jwt_auth: ^0.5.0
+  dart_jsonwebtoken: ^2.12.1
   logging: ^1.2.0
   args: ^2.4.2
 

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:dotenv/dotenv.dart';
 import 'package:logging/logging.dart';
-import 'package:jwt_auth/jwt_auth.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
 /// Servicio para manejar la generación y verificación de tokens JWT
 class JwtService {
@@ -20,42 +20,36 @@ class JwtService {
 
   /// Genera un token JWT para un usuario
   String generateToken(String userId, String userName, String userRole, List<String>? userAreas) {
-    final jwt = JwtAuth(secret: _secretKey);
-    
     // Calcular fecha de expiración
     final expiresAt = DateTime.now().add(Duration(hours: _expirationHours));
     
     // Crear payload
-    final payload = {
+    final jwt = JWT({
       'sub': userId,
       'name': userName,
       'role': userRole,
       'areas': userAreas ?? [],
       'iat': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      'exp': expiresAt.millisecondsSinceEpoch ~/ 1000,
-    };
+    }, issuer: 'pinares_backend');
     
-    // Generar token
-    return jwt.generateJwt(payload);
+    // Generar token con expiración
+    return jwt.sign(SecretKey(_secretKey), expiresIn: Duration(hours: _expirationHours));
   }
 
   /// Verifica y decodifica un token JWT
   Map<String, dynamic>? verifyToken(String token) {
     try {
-      final jwt = JwtAuth(secret: _secretKey);
-      final payload = jwt.parseJwt(token);
+      // Verificar y decodificar el token
+      final jwt = JWT.verify(token, SecretKey(_secretKey));
       
-      // Verificar expiración
-      final exp = payload['exp'] as int;
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      
-      if (now > exp) {
-        _logger.warning('Token expirado');
-        return null;
-      }
+      // Convertir el payload a Map<String, dynamic>
+      final payload = Map<String, dynamic>.from(jwt.payload);
       
       return payload;
-    } catch (e) {
+    } on JWTExpiredError {
+      _logger.warning('Token expirado');
+      return null;
+    } on JWTError catch (e) {
       _logger.warning('Error al verificar token: $e');
       return null;
     }
