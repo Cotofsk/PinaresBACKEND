@@ -46,11 +46,12 @@ class JwtService {
       final payload = Map<String, dynamic>.from(jwt.payload);
       
       return payload;
-    } on JWTExpiredError {
-      _logger.warning('Token expirado');
-      return null;
-    } on JWTError catch (e) {
-      _logger.warning('Error al verificar token: $e');
+    } catch (e) {
+      if (e.toString().contains('JWT expired')) {
+        _logger.warning('Token expirado');
+      } else {
+        _logger.warning('Error al verificar token: $e');
+      }
       return null;
     }
   }

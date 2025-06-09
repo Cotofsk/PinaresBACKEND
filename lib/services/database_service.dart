@@ -125,4 +125,31 @@ class DatabaseService {
   
   // Getter para exponer la conexión a los servicios
   PostgreSQLConnection get connection => _connection;
+
+  /// Ejecuta una consulta SQL y devuelve los resultados
+  Future<List<Map<String, dynamic>>> query(String sql, [Map<String, dynamic>? parameters]) async {
+    return executeWithRetry(() async {
+      final results = await _connection.mappedResultsQuery(
+        sql,
+        substitutionValues: parameters,
+      );
+      
+      // Convertir resultados a formato más simple
+      return results.map((row) {
+        // Cada fila tiene un mapa con el nombre de la tabla como clave
+        final firstTableName = row.keys.first;
+        return row[firstTableName]!;
+      }).toList();
+    });
+  }
+
+  /// Ejecuta una operación SQL que no devuelve resultados
+  Future<int> execute(String sql, [Map<String, dynamic>? parameters]) async {
+    return executeWithRetry(() async {
+      return await _connection.execute(
+        sql,
+        substitutionValues: parameters,
+      );
+    });
+  }
 } 
