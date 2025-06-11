@@ -2,11 +2,13 @@ import 'package:logging/logging.dart';
 
 import '../models/note_model.dart';
 import 'database_service.dart';
+import 'websocket_service.dart';
 
 /// Servicio para manejar operaciones relacionadas con notas
 class NotesService {
   final _logger = Logger('NotesService');
   final _dbService = DatabaseService();
+  final _wsService = WebSocketService();
 
   /// Obtiene todas las notas para una casa
   Future<List<NoteModel>> getNotesForHouse(int houseId) async {
@@ -25,6 +27,56 @@ class NotesService {
       });
     } catch (e) {
       _logger.severe('Error al obtener las notas: $e');
+      return [];
+    }
+  }
+
+  /// Obtiene notas para múltiples casas en una sola consulta
+  Future<List<NoteModel>> getNotesForMultipleHouses(List<int> houseIds) async {
+    if (houseIds.isEmpty) return [];
+
+    try {
+      return await _dbService.executeWithRetry(() async {
+        // Crear una lista de parámetros para la consulta
+        final params = <String>[];
+        final substitutionValues = <String, dynamic>{};
+        
+        for (var i = 0; i < houseIds.length; i++) {
+          final paramName = 'house_id_$i';
+          params.add('@$paramName');
+          substitutionValues[paramName] = houseIds[i];
+        }
+        
+        // Construir la consulta SQL con todos los IDs
+        final query = '''
+          SELECT n.*, h.name as house_name, h.type as house_type
+          FROM notes n
+          JOIN houses h ON n.house_id = h.id
+          WHERE n.house_id IN (${params.join(', ')})
+          ORDER BY n.created_at DESC
+        ''';
+        
+        _logger.info('Ejecutando consulta para ${houseIds.length} casas');
+        final results = await _dbService.connection.mappedResultsQuery(
+          query,
+          substitutionValues: substitutionValues,
+        );
+        
+        _logger.info('Consulta completada, procesando ${results.length} resultados');
+        
+        return results.map((r) {
+          final noteData = r['notes']!;
+          final houseData = r['houses']!;
+          
+          return NoteModel.fromMap({
+            ...noteData,
+            'house_name': houseData['name'],
+            'house_type': houseData['type'],
+          });
+        }).toList();
+      });
+    } catch (e, stackTrace) {
+      _logger.severe('Error al obtener notas para múltiples casas: $e', e, stackTrace);
       return [];
     }
   }
@@ -85,7 +137,39 @@ class NotesService {
           return null;
         }
         
-        return NoteModel.fromMap(results.first['notes']!);
+        final newNote = NoteModel.fromMap(results.first['notes']!);
+        
+        // Obtener el nombre de la casa para incluirlo en la notificación
+        final houseResults = await _dbService.connection.mappedResultsQuery(
+          'SELECT name, type FROM houses WHERE id = @id',
+          substitutionValues: {
+            'id': houseId,
+          },
+        );
+        
+        String? houseName;
+        String? houseType;
+        if (houseResults.isNotEmpty) {
+          houseName = houseResults.first['houses']!['name'] as String;
+          houseType = houseResults.first['houses']!['type'] as String;
+        }
+        
+        // Notificar a los clientes sobre la nueva nota
+        _wsService.notifyTopic(
+          WebSocketService.TOPIC_NOTES,
+          {
+            'action': 'create',
+            'entity': 'note',
+            'note': {
+              ...newNote.toMap(),
+              'house_name': houseName,
+              'house_type': houseType,
+            },
+            'created_by': createdBy
+          }
+        );
+        
+        return newNote;
       });
     } catch (e) {
       _logger.severe('Error al crear la nota: $e');
@@ -147,6 +231,19 @@ class NotesService {
           
           // Confirmar la transacción
           await _dbService.connection.execute('COMMIT');
+          
+          // Notificar a los clientes sobre la eliminación de la nota
+          _wsService.notifyTopic(
+            WebSocketService.TOPIC_NOTES,
+            {
+              'action': 'delete',
+              'entity': 'note',
+              'note_id': noteId,
+              'house_id': noteData['house_id'],
+              'deleted_at': DateTime.now().toUtc().toIso8601String()
+            }
+          );
+          
           return true;
         } catch (e) {
           // Si hay algún error, revertimos la transacción

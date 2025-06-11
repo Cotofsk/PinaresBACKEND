@@ -37,9 +37,62 @@ class NotesController {
     }
   }
 
+  /// Obtiene notas para múltiples casas
+  Future<Response> getNotesForMultipleHouses(Request request) async {
+    try {
+      // Leer el cuerpo de la solicitud
+      final String body = await request.readAsString();
+      final Map<String, dynamic> data = jsonDecode(body);
+      
+      // Validar datos requeridos
+      if (!data.containsKey('house_ids') || data['house_ids'] == null) {
+        return Response(400, 
+          body: jsonEncode({'error': 'Se requiere la lista de IDs de casas'}),
+          headers: {'content-type': 'application/json'});
+      }
+      
+      final List<dynamic> houseIds = data['house_ids'];
+      
+      // Validar que todos los IDs sean números
+      final List<int> validHouseIds = [];
+      for (final id in houseIds) {
+        final parsedId = int.tryParse(id.toString());
+        if (parsedId != null) {
+          validHouseIds.add(parsedId);
+        }
+      }
+      
+      if (validHouseIds.isEmpty) {
+        return Response(400, 
+          body: jsonEncode({'error': 'No se proporcionaron IDs de casas válidos'}),
+          headers: {'content-type': 'application/json'});
+      }
+      
+      // Obtener las notas para todas las casas en una sola consulta
+      _logger.info('Obteniendo notas para ${validHouseIds.length} casas');
+      final allNotes = await _notesService.getNotesForMultipleHouses(validHouseIds);
+      _logger.info('Se obtuvieron ${allNotes.length} notas en total');
+      
+      // Devolver las notas en un objeto con la propiedad 'notes'
+      return Response.ok(
+        jsonEncode({
+          'notes': allNotes.map((note) => note.toMap()).toList(),
+        }),
+        headers: {'content-type': 'application/json'}
+      );
+    } catch (e, stackTrace) {
+      _logger.severe('Error al obtener notas para múltiples casas', e, stackTrace);
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Error al obtener notas para múltiples casas'}),
+        headers: {'content-type': 'application/json'}
+      );
+    }
+  }
+
   /// Crea una nueva nota para una casa
   Future<Response> createNote(Request request, String houseId) async {
     try {
+      _logger.info('Iniciando creación de nota para casa $houseId');
       final houseIdInt = int.tryParse(houseId);
       if (houseIdInt == null) {
         return Response(400, 
@@ -49,9 +102,11 @@ class NotesController {
       
       // Obtener el usuario del contexto
       final userName = request.context['userName'] as String;
+      _logger.info('Usuario $userName creando nota para casa $houseId');
       
       // Leer el cuerpo de la solicitud
       final String body = await request.readAsString();
+      _logger.info('Cuerpo de la solicitud: $body');
       final Map<String, dynamic> data = jsonDecode(body);
       
       // Validar datos requeridos
@@ -82,6 +137,7 @@ class NotesController {
       }
       
       // Crear la nota
+      _logger.info('Creando nota en la base de datos: casa=$houseIdInt, categoria=$category, area=$area');
       final note = await _notesService.createNote(
         houseId: houseIdInt,
         category: category,
@@ -91,25 +147,34 @@ class NotesController {
       );
       
       if (note == null) {
+        _logger.warning('No se pudo crear la nota en la base de datos');
         return Response.internalServerError(
           body: jsonEncode({'error': 'Error al crear la nota'}),
           headers: {'content-type': 'application/json'}
         );
       }
       
-      _logger.info('Nota creada para casa $houseIdInt por $userName');
+      _logger.info('Nota creada exitosamente: id=${note.id} para casa $houseIdInt por $userName');
+      
+      // Convertir la nota a un mapa para evitar problemas de serialización
+      final noteMap = note.toMap();
+      _logger.info('Nota serializada: $noteMap');
+      
+      // Construir la respuesta
+      final responseBody = jsonEncode({
+        'success': true,
+        'note': noteMap,
+      });
+      _logger.info('Enviando respuesta: $responseBody');
       
       return Response.ok(
-        jsonEncode({
-          'success': true,
-          'note': note.toMap(),
-        }),
+        responseBody,
         headers: {'content-type': 'application/json'}
       );
     } catch (e, stackTrace) {
       _logger.severe('Error al crear nota', e, stackTrace);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Error al crear nota'}),
+        body: jsonEncode({'error': 'Error al crear nota: ${e.toString()}'}),
         headers: {'content-type': 'application/json'}
       );
     }

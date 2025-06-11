@@ -4,11 +4,6 @@ class InventoryItem {
   final int houseId;
   final int itemId;
   final int quantity;
-  final String status;
-  final String createdAt;
-  final String updatedAt;
-  final String createdBy;
-  final String updatedBy;
 
   /// Constructor
   InventoryItem({
@@ -16,11 +11,6 @@ class InventoryItem {
     required this.houseId,
     required this.itemId,
     required this.quantity,
-    required this.status,
-    required this.createdAt,
-    required this.updatedAt,
-    required this.createdBy,
-    required this.updatedBy,
   });
 
   /// Crea una instancia de InventoryItem desde un mapa
@@ -30,11 +20,6 @@ class InventoryItem {
       houseId: map['house_id'],
       itemId: map['item_id'],
       quantity: map['quantity'],
-      status: map['status'],
-      createdAt: map['created_at'],
-      updatedAt: map['updated_at'],
-      createdBy: map['created_by'],
-      updatedBy: map['updated_by'],
     );
   }
 
@@ -45,11 +30,6 @@ class InventoryItem {
       'house_id': houseId,
       'item_id': itemId,
       'quantity': quantity,
-      'status': status,
-      'created_at': createdAt,
-      'updated_at': updatedAt,
-      'created_by': createdBy,
-      'updated_by': updatedBy,
     };
   }
 
@@ -59,27 +39,17 @@ class InventoryItem {
     int? houseId,
     int? itemId,
     int? quantity,
-    String? status,
-    String? createdAt,
-    String? updatedAt,
-    String? createdBy,
-    String? updatedBy,
   }) {
     return InventoryItem(
       id: id ?? this.id,
       houseId: houseId ?? this.houseId,
       itemId: itemId ?? this.itemId,
       quantity: quantity ?? this.quantity,
-      status: status ?? this.status,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      createdBy: createdBy ?? this.createdBy,
-      updatedBy: updatedBy ?? this.updatedBy,
     );
   }
 
   @override
   String toString() {
-    return 'InventoryItem(id: $id, houseId: $houseId, itemId: $itemId, quantity: $quantity, status: $status)';
+    return 'InventoryItem(id: $id, houseId: $houseId, itemId: $itemId, quantity: $quantity)';
   }
 } 

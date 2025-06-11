@@ -38,7 +38,7 @@ class DatabaseService {
       username: username,
       password: password,
       useSSL: true,
-      timeoutInSeconds: 60,
+      timeoutInSeconds: 10,
       timeZone: 'UTC',
       isUnixSocket: false,
       allowClearTextPassword: false,
@@ -68,9 +68,9 @@ class DatabaseService {
         return false;
       }
       
-      // Ejecutar consulta simple para verificar conexión
+      // Ejecutar consulta simple para verificar conexión con timeout más corto
       await _connection.execute('SELECT 1')
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 3));
       
       return true;
     } catch (e) {
@@ -88,13 +88,30 @@ class DatabaseService {
         // Verificar y asegurar conexión
         if (!await isConnectionActive()) {
           _logger.info('Reconectando a la base de datos...');
+          // Si la conexión está cerrada, inicializarla de nuevo
+          if (_connection.isClosed) {
+            _initConnection();
+          }
           await connect();
         }
         
-        // Ejecutar operación
-        return await operation();
+        // Ejecutar operación con timeout
+        return await operation().timeout(
+          const Duration(seconds: 5), 
+          onTimeout: () {
+            throw TimeoutException('La operación ha tardado más de 5 segundos');
+          }
+        );
       } catch (e) {
         attempts++;
+        
+        // Si es un error de timeout, recrear la conexión
+        if (e is TimeoutException) {
+          _logger.warning('Timeout en la operación, recreando conexión...');
+          await dispose(); // Cerrar la conexión existente
+          _initConnection(); // Crear una nueva instancia
+          await connect(); // Abrir la nueva conexión
+        }
         
         if (attempts >= maxRetries) {
           _logger.severe('Error después de $maxRetries intentos: $e');

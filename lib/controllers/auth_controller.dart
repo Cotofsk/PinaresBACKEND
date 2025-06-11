@@ -37,7 +37,7 @@ class AuthController {
       // Verificar el código en la base de datos
       final results = await _dbService.executeWithRetry(() async {
         return await _dbService.connection.mappedResultsQuery(
-          'SELECT nombre, rol, areas_permitidas FROM accesos WHERE codigo = @codigo',
+          'SELECT id, nombre, rol, areas_permitidas FROM accesos WHERE codigo = @codigo',
           substitutionValues: {
             'codigo': codigo,
           },
@@ -54,6 +54,7 @@ class AuthController {
       
       // Obtener datos del usuario
       final userData = results.first['accesos']!;
+      final id = userData['id'] as int;
       final nombre = userData['nombre'] as String;
       final rol = userData['rol'] as String;
       
@@ -66,6 +67,8 @@ class AuthController {
         }
       }
       
+      _logger.info('Usuario autenticado: $nombre (ID: $id)');
+      
       // Generar token JWT
       final token = _jwtService.generateToken(
         codigo,
@@ -74,13 +77,12 @@ class AuthController {
         areasPermitidas,
       );
       
-      _logger.info('Usuario autenticado: $nombre');
-      
       // Devolver respuesta con token y datos del usuario
       return Response.ok(
         jsonEncode({
           'token': token,
           'user': {
+            'id': id,
             'nombre': nombre,
             'rol': rol,
             'areas_permitidas': areasPermitidas,

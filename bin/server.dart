@@ -46,15 +46,28 @@ void main(List<String> args) async {
   // Crear router para la API
   final router = createApiRouter();
 
+  // Configuración de CORS para permitir WebSockets
+  final corsHeadersOptions = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Origin, Content-Type, X-Auth-Token, Authorization, Accept, X-Requested-With',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Type, Access-Control-Allow-Origin',
+    'Connection': 'keep-alive',
+  };
+
   // Crear pipeline con middlewares
   final handler = Pipeline()
       .addMiddleware(logRequests())
-      .addMiddleware(corsHeaders())
+      .addMiddleware(corsHeaders(headers: corsHeadersOptions))
       .addHandler(router);
 
   // Iniciar servidor
   final server = await serve(handler, '0.0.0.0', port);
   _logger.info('Servidor iniciado en http://${server.address.host}:${server.port}');
+  _logger.info('WebSocket disponible en ws://${server.address.host}:${server.port}/ws');
+  _logger.info('WebSocket autenticado disponible en ws://${server.address.host}:${server.port}/api/ws?token=<tu-token>');
 
   // Manejar señales de cierre
   ProcessSignal.sigint.watch().listen((_) async {

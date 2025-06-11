@@ -13,11 +13,12 @@ class UsersService {
     try {
       return await _dbService.executeWithRetry(() async {
         final results = await _dbService.connection.mappedResultsQuery(
-          'SELECT nombre, codigo, rol, areas_permitidas FROM accesos ORDER BY nombre',
+          'SELECT id, nombre, codigo, rol, areas_permitidas FROM accesos ORDER BY nombre',
         );
 
         return results
             .map((r) => UserModel.fromMap({
+                  'id': r['accesos']!['id'] as int,
                   'nombre': r['accesos']!['nombre'] as String,
                   'rol': r['accesos']!['rol'] as String,
                   'codigo': r['accesos']!['codigo'] as String,

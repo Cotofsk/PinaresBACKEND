@@ -2,11 +2,13 @@ import 'package:logging/logging.dart';
 
 import '../models/house_model.dart';
 import 'database_service.dart';
+import 'websocket_service.dart';
 
 /// Servicio para manejar operaciones relacionadas con casas
 class HousesService {
   final _logger = Logger('HousesService');
   final _dbService = DatabaseService();
+  final _wsService = WebSocketService();
 
   /// Obtiene todas las casas
   Future<List<HouseModel>> getAllHouses() async {
@@ -72,6 +74,23 @@ class HousesService {
           },
         );
       });
+      
+      // Obtener la casa actualizada para enviarla en la notificación
+      final updatedHouse = await getHouseById(houseId);
+      if (updatedHouse != null) {
+        // Notificar a los clientes suscritos al tópico de casas
+        _wsService.notifyTopic(
+          WebSocketService.TOPIC_HOUSES, 
+          {
+            'action': 'update',
+            'entity': 'house',
+            'id': houseId,
+            'house': updatedHouse.toMap(),
+            'changes': {'status': status}
+          }
+        );
+      }
+      
       return true;
     } catch (e) {
       _logger.severe('Error al actualizar el estado de la casa: $e');
@@ -92,6 +111,23 @@ class HousesService {
           },
         );
       });
+      
+      // Obtener la casa actualizada para enviarla en la notificación
+      final updatedHouse = await getHouseById(houseId);
+      if (updatedHouse != null) {
+        // Notificar a los clientes suscritos al tópico de casas
+        _wsService.notifyTopic(
+          WebSocketService.TOPIC_HOUSES, 
+          {
+            'action': 'update',
+            'entity': 'house',
+            'id': houseId,
+            'house': updatedHouse.toMap(),
+            'changes': {'checks': checks}
+          }
+        );
+      }
+      
       return true;
     } catch (e) {
       _logger.severe('Error al actualizar los checks de la casa: $e');
