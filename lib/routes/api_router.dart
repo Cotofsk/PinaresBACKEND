@@ -40,6 +40,9 @@ Router createApiRouter() {
   // Ruta WebSocket autenticada
   router.get('/api/ws', websocketController.handleAuthenticatedWebSocket());
 
+  // Endpoint para enviar notificaciones WebSocket
+  router.post('/api/websocket/notify', authMiddleware.authenticate(websocketController.handleNotify));
+
   // Rutas protegidas (requieren autenticación)
   // Casas
   router.get('/api/houses', authMiddleware.authenticate(housesController.getAllHouses));
