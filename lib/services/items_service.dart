@@ -143,4 +143,27 @@ class ItemsService {
       return false;
     }
   }
+
+  /// Obtiene un item por su ID
+  Future<Item?> getItemById(int id) async {
+    try {
+      _logger.info('Obteniendo item $id');
+      
+      final result = await _dbService.query(
+        'SELECT id, space_id, name, expected_quantity FROM items WHERE id = @id',
+        {'id': id},
+      );
+      
+      if (result.isEmpty) {
+        _logger.info('Item $id no encontrado');
+        return null;
+      }
+      
+      _logger.info('Item $id obtenido correctamente');
+      return Item.fromMap(result.first);
+    } catch (e, stackTrace) {
+      _logger.severe('Error al obtener item $id', e, stackTrace);
+      return null;
+    }
+  }
 }

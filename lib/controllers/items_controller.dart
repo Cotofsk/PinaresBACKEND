@@ -3,11 +3,13 @@ import 'package:logging/logging.dart';
 import 'package:shelf/shelf.dart';
 
 import '../services/items_service.dart';
+import '../services/websocket_service.dart';
 
 /// Controlador para manejar operaciones relacionadas con items
 class ItemsController {
   final _logger = Logger('ItemsController');
   final _itemsService = ItemsService();
+  final _wsService = WebSocketService();
 
   /// Obtiene todos los items para un espacio específico
   Future<Response> getItemsBySpaceId(Request request, String spaceId) async {
@@ -82,21 +84,27 @@ class ItemsController {
       );
       
       if (item == null) {
-        return Response.internalServerError(
+        return Response(500, 
           body: jsonEncode({'error': 'Error al crear el item'}),
-          headers: {'content-type': 'application/json'}
-        );
+          headers: {'content-type': 'application/json'});
       }
       
-      _logger.info('Item creado para espacio $spaceIdInt por $userName');
+      _logger.info('Item creado por $userName: ${item.name} (ID: ${item.id})');
+      
+      // Enviar notificación WebSocket
+      _wsService.notifyTopic(WebSocketService.TOPIC_INVENTORY, {
+        'action': 'create',
+        'space_id': spaceIdInt,
+        'item_id': item.id,
+        'item_name': item.name,
+        'expected_quantity': item.expectedQuantity,
+        'created_by': userName,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
       
       return Response.ok(
-        jsonEncode({
-          'success': true,
-          'item': item.toMap(),
-        }),
-        headers: {'content-type': 'application/json'}
-      );
+        jsonEncode({'item': item.toMap()}),
+        headers: {'content-type': 'application/json'});
     } catch (e, stackTrace) {
       _logger.severe('Error al crear item', e, stackTrace);
       return Response.internalServerError(
@@ -133,46 +141,63 @@ class ItemsController {
       final String body = await request.readAsString();
       final Map<String, dynamic> data = jsonDecode(body);
       
-      // Validar que al menos un campo a actualizar esté presente
-      if (!data.containsKey('nombre') && !data.containsKey('cantidad_esperada')) {
+      // Validar datos requeridos
+      if (!data.containsKey('nombre') || data['nombre'] == null ||
+          !data.containsKey('cantidad_esperada') || data['cantidad_esperada'] == null) {
         return Response(400, 
-          body: jsonEncode({'error': 'Se requiere al menos un campo para actualizar (nombre o cantidad_esperada)'}),
+          body: jsonEncode({'error': 'Se requieren nombre y cantidad_esperada'}),
+          headers: {'content-type': 'application/json'});
+      }
+      
+      final String name = data['nombre'];
+      final int expectedQuantity = data['cantidad_esperada'];
+      
+      // Obtener el item original para saber su spaceId
+      final originalItem = await _itemsService.getItemById(itemId);
+      if (originalItem == null) {
+        return Response(404, 
+          body: jsonEncode({'error': 'Item no encontrado'}),
           headers: {'content-type': 'application/json'});
       }
       
       // Actualizar el item
       final item = await _itemsService.updateItem(
         id: itemId,
-        name: data['nombre'],
-        expectedQuantity: data['cantidad_esperada'],
+        name: name,
+        expectedQuantity: expectedQuantity,
       );
       
       if (item == null) {
-        return Response.internalServerError(
+        return Response(500, 
           body: jsonEncode({'error': 'Error al actualizar el item'}),
-          headers: {'content-type': 'application/json'}
-        );
+          headers: {'content-type': 'application/json'});
       }
       
-      _logger.info('Item $itemId actualizado por $userName');
+      _logger.info('Item actualizado por $userName: ${item.name} (ID: ${item.id})');
+      
+      // Enviar notificación WebSocket
+      _wsService.notifyTopic(WebSocketService.TOPIC_INVENTORY, {
+        'action': 'update',
+        'space_id': originalItem.spaceId,
+        'item_id': item.id,
+        'item_name': item.name,
+        'expected_quantity': item.expectedQuantity,
+        'updated_by': userName,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
       
       return Response.ok(
-        jsonEncode({
-          'success': true,
-          'item': item.toMap(),
-        }),
-        headers: {'content-type': 'application/json'}
-      );
+        jsonEncode({'item': item.toMap()}),
+        headers: {'content-type': 'application/json'});
     } catch (e, stackTrace) {
       _logger.severe('Error al actualizar item', e, stackTrace);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Error al actualizar item'}),
-        headers: {'content-type': 'application/json'}
-      );
+        body: jsonEncode({'error': 'Error al actualizar el item'}),
+        headers: {'content-type': 'application/json'});
     }
   }
 
-  /// Elimina un item
+  /// Elimina un item existente
   Future<Response> deleteItem(Request request, String id) async {
     try {
       final itemId = int.tryParse(id);
@@ -195,31 +220,42 @@ class ItemsController {
       // Obtener el usuario del contexto
       final userName = request.context['userName'] as String;
       
+      // Obtener el item original para saber su spaceId
+      final originalItem = await _itemsService.getItemById(itemId);
+      if (originalItem == null) {
+        return Response(404, 
+          body: jsonEncode({'error': 'Item no encontrado'}),
+          headers: {'content-type': 'application/json'});
+      }
+      
       // Eliminar el item
       final success = await _itemsService.deleteItem(itemId);
       
       if (!success) {
-        return Response.internalServerError(
+        return Response(500, 
           body: jsonEncode({'error': 'Error al eliminar el item'}),
-          headers: {'content-type': 'application/json'}
-        );
+          headers: {'content-type': 'application/json'});
       }
       
-      _logger.info('Item $itemId eliminado por $userName');
+      _logger.info('Item eliminado por $userName: ID $itemId');
+      
+      // Enviar notificación WebSocket
+      _wsService.notifyTopic(WebSocketService.TOPIC_INVENTORY, {
+        'action': 'delete',
+        'space_id': originalItem.spaceId,
+        'item_id': itemId,
+        'deleted_by': userName,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
       
       return Response.ok(
-        jsonEncode({
-          'success': true,
-          'message': 'Item eliminado correctamente',
-        }),
-        headers: {'content-type': 'application/json'}
-      );
+        jsonEncode({'success': true}),
+        headers: {'content-type': 'application/json'});
     } catch (e, stackTrace) {
       _logger.severe('Error al eliminar item', e, stackTrace);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Error al eliminar item'}),
-        headers: {'content-type': 'application/json'}
-      );
+        body: jsonEncode({'error': 'Error al eliminar el item'}),
+        headers: {'content-type': 'application/json'});
     }
   }
 }
