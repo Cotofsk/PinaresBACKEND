@@ -10,23 +10,26 @@ class TasksService {
   final _dbService = DatabaseService();
   final _wsService = WebSocketService();
 
-  /// Obtiene una tarea específica por su ID
-  Future<Task?> getTaskById(int? taskId) async {
-    if (taskId == null) {
-      _logger.warning('Se intentó obtener una tarea con ID nulo');
-      return null;
-    }
-    
+  /// Obtiene una tarea por ID
+  Future<Task?> getTaskById(int taskId) async {
     try {
-      // Obtener la tarea
-      final taskResult = await _dbService.query(
+      // Primero buscar en la tabla tareas
+      var taskResult = await _dbService.query(
         'SELECT * FROM tareas WHERE id = @id',
         {'id': taskId},
       );
       
+      // Si no se encuentra en tareas, buscar en tareas_completadas
       if (taskResult.isEmpty) {
-        _logger.warning('No se encontró la tarea con ID $taskId');
-        return null;
+        taskResult = await _dbService.query(
+          'SELECT * FROM tareas_completadas WHERE id = @id',
+          {'id': taskId},
+        );
+        
+        if (taskResult.isEmpty) {
+          _logger.warning('No se encontró la tarea con ID $taskId en ninguna tabla');
+          return null;
+        }
       }
       
       final taskRow = taskResult.first;
@@ -49,13 +52,12 @@ class TasksService {
       // Combinar nombre de usuarios si hay varios
       final assignedTo = assignedUserNames.isNotEmpty ? assignedUserNames.join(', ') : null;
       
-      // Crear objeto de tarea con usuarios asignados
       return Task.fromMap({
         'id': taskRow['id'],
         'title': taskRow['tipo'],
         'description': taskRow['tipo'],
         'priority': 1,
-        'status': taskRow['estado'],
+        'status': taskRow['estado'] ?? 'completada',
         'house_id': taskRow['id_casa'],
         'assigned_to': assignedTo,
         'assigned_user_ids': assignedUserIds,
@@ -264,6 +266,28 @@ class TasksService {
         final taskData = taskResult.first;
         final now = DateTime.now().toIso8601String();
         
+        // Si la tarea es de tipo "limpiar", actualizar el estado de la casa a "clean"
+        if (taskData['tipo'].toString().toLowerCase().contains('limpiar')) {
+          await _dbService.execute(
+            'UPDATE houses SET status = @status WHERE id = @house_id',
+            {
+              'status': 'clean',
+              'house_id': taskData['id_casa'],
+            },
+          );
+          
+          // Notificar actualización de estado de la casa
+          _wsService.notifyTopic(
+            WebSocketService.TOPIC_HOUSES,
+            {
+              'action': 'update_status',
+              'house_id': taskData['id_casa'],
+              'status': 'clean',
+              'timestamp': now
+            }
+          );
+        }
+        
         // Insertar en tareas_completadas
         await _dbService.execute(
           '''
@@ -303,6 +327,8 @@ class TasksService {
             'action': 'complete',
             'entity': 'task',
             'task_id': id,
+            'task_type': taskData['tipo'],
+            'house_id': taskData['id_casa'],
             'completed_by': updatedBy,
             'completed_at': now
           }
