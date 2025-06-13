@@ -6,6 +6,8 @@ class Task {
   final int priority;
   final String status;
   final int? houseId;
+  final String? houseName;
+  final String? houseType;
   final String? assignedTo;
   final List<int>? assignedUserIds;
   final List<String>? assignedUserNames;
@@ -23,6 +25,8 @@ class Task {
     required this.priority,
     required this.status,
     this.houseId,
+    this.houseName,
+    this.houseType,
     this.assignedTo,
     this.assignedUserIds,
     this.assignedUserNames,
@@ -59,6 +63,8 @@ class Task {
       priority: map['priority'] ?? 1,
       status: map['status'] ?? map['estado'] ?? 'pendiente',
       houseId: map['house_id'] ?? map['id_casa'],
+      houseName: map['house_name'],
+      houseType: map['house_type'],
       assignedTo: map['assigned_to'],
       assignedUserIds: userIds,
       assignedUserNames: userNames,
@@ -73,16 +79,18 @@ class Task {
   /// Convierte la instancia a un mapa
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      if (id != null) 'id': id,
       'title': title,
       'description': description,
       'priority': priority,
       'status': status,
-      'house_id': houseId,
-      'assigned_to': assignedTo,
+      if (houseId != null) 'house_id': houseId,
+      if (houseName != null) 'house_name': houseName,
+      if (houseType != null) 'house_type': houseType,
+      if (assignedTo != null) 'assigned_to': assignedTo,
       if (assignedUserIds != null) 'assigned_user_ids': assignedUserIds,
       if (assignedUserNames != null) 'assigned_user_names': assignedUserNames,
-      'due_date': dueDate,
+      if (dueDate != null) 'due_date': dueDate,
       'created_at': createdAt,
       'updated_at': updatedAt,
       'created_by': createdBy,
@@ -98,6 +106,8 @@ class Task {
     int? priority,
     String? status,
     int? houseId,
+    String? houseName,
+    String? houseType,
     String? assignedTo,
     List<int>? assignedUserIds,
     List<String>? assignedUserNames,
@@ -114,6 +124,8 @@ class Task {
       priority: priority ?? this.priority,
       status: status ?? this.status,
       houseId: houseId ?? this.houseId,
+      houseName: houseName ?? this.houseName,
+      houseType: houseType ?? this.houseType,
       assignedTo: assignedTo ?? this.assignedTo,
       assignedUserIds: assignedUserIds ?? this.assignedUserIds,
       assignedUserNames: assignedUserNames ?? this.assignedUserNames,

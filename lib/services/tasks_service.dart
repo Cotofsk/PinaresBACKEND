@@ -135,9 +135,14 @@ class TasksService {
   /// Obtiene las tareas completadas de la tabla tareas_completadas
   Future<List<Task>> getCompletedTasks() async {
     try {
-      // Obtener todas las tareas completadas
+      // Obtener todas las tareas completadas con información de la casa
       final tasksResult = await _dbService.query(
-        'SELECT * FROM tareas_completadas ORDER BY fecha_finalizacion DESC',
+        '''
+        SELECT tc.*, h.name as house_name, h.type as house_type
+        FROM tareas_completadas tc
+        LEFT JOIN houses h ON tc.id_casa = h.id
+        ORDER BY tc.fecha_finalizacion DESC
+        ''',
       );
       
       final List<Task> tasks = [];
@@ -152,10 +157,12 @@ class TasksService {
           'priority': 1,
           'status': 'completada',
           'house_id': taskRow['id_casa'],
+          'house_name': taskRow['house_name'],
+          'house_type': taskRow['house_type'],
           'assigned_to': null, // Las tareas completadas ya no tienen usuarios asignados
           'assigned_user_ids': [],
           'assigned_user_names': [],
-          'due_date': null,
+          'fecha_finalizacion': taskRow['fecha_finalizacion']?.toString(),
           'created_at': taskRow['fecha_creacion']?.toString(),
           'updated_at': taskRow['fecha_finalizacion']?.toString(),
           'created_by': '',
