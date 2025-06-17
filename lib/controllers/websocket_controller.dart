@@ -7,11 +7,13 @@ import 'package:uuid/uuid.dart';
 
 import '../services/websocket_service.dart';
 import '../services/jwt_service.dart';
+import '../services/notification_service.dart';
 
 /// Controlador para manejar conexiones WebSocket
 class WebSocketController {
   final _logger = Logger('WebSocketController');
-  final _webSocketService = WebSocketService();
+  final WebSocketService _webSocketService = WebSocketService();
+  final NotificationService _notificationService = NotificationService();
   final _uuid = Uuid();
   final _jwtService = JwtService();
 
@@ -98,8 +100,7 @@ class WebSocketController {
     };
   }
   
-  /// Handler para manejar el endpoint de notificación WebSocket
-  /// Este endpoint permite enviar notificaciones a todos los clientes conectados
+  /// Maneja las solicitudes de notificación WebSocket
   Future<Response> handleNotify(Request request) async {
     try {
       // Leer y decodificar el cuerpo de la solicitud
@@ -120,9 +121,17 @@ class WebSocketController {
           headers: {'content-type': 'application/json'});
       }
       
-      // Enviar la notificación a todos los clientes suscritos al tópico
-      _logger.info('Enviando notificación a tópico $topic: ${jsonEncode(payload)}');
-      _webSocketService.notifyTopic(topic, payload);
+      // Obtener información del usuario que envía la notificación
+      final userName = request.context['userName'] as String? ?? 'sistema';
+      
+      // Agregar información adicional a la notificación
+      if (!payload.containsKey('timestamp')) {
+        payload['timestamp'] = DateTime.now().toIso8601String();
+      }
+      
+      // Enviar la notificación a todos los clientes suscritos al tópico usando el servicio centralizado
+      _logger.info('Usuario $userName enviando notificación a tópico $topic: ${jsonEncode(payload)}');
+      _notificationService.notifyCustom(topic, payload);
       
       // Responder con éxito
       return Response.ok(

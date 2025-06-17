@@ -3,12 +3,14 @@ import 'package:logging/logging.dart';
 import '../models/task_model.dart';
 import 'database_service.dart';
 import 'websocket_service.dart';
+import 'notification_service.dart';
 
 /// Servicio para manejar operaciones de tareas
 class TasksService {
   final _logger = Logger('TasksService');
   final _dbService = DatabaseService();
   final _wsService = WebSocketService();
+  final _notificationService = NotificationService();
 
   /// Obtiene una tarea por ID
   Future<Task?> getTaskById(int taskId) async {
@@ -226,15 +228,11 @@ class TasksService {
         'updated_by': createdBy,
       });
       
-      // Notificar a los clientes sobre la nueva tarea
-      _wsService.notifyTopic(
-        WebSocketService.TOPIC_TASKS,
-        {
-          'action': 'create',
-          'entity': 'task',
-          'task': newTask.toMap(),
-          'created_by': createdBy
-        }
+      // Notificar a los clientes sobre la nueva tarea usando el servicio centralizado
+      _notificationService.notifyTaskUpdate(
+        action: 'create',
+        taskData: newTask.toMap(),
+        createdBy: createdBy
       );
       
       return newTask;
@@ -327,18 +325,13 @@ class TasksService {
           {'id_tarea': id},
         );
         
-        // Notificar a los clientes que la tarea ha sido completada
-        _wsService.notifyTopic(
-          WebSocketService.TOPIC_TASKS,
-          {
-            'action': 'complete',
-            'entity': 'task',
-            'task_id': id,
-            'task_type': taskData['tipo'],
-            'house_id': taskData['id_casa'],
-            'completed_by': updatedBy,
-            'completed_at': now
-          }
+        // Notificar a los clientes que la tarea ha sido completada usando el servicio centralizado
+        _notificationService.notifyTaskUpdate(
+          action: 'complete',
+          taskId: id,
+          taskType: taskData['tipo'],
+          houseId: taskData['id_casa'],
+          completedBy: updatedBy
         );
         
         return true;
@@ -384,15 +377,11 @@ class TasksService {
       // Obtener la tarea actualizada para la notificación
       final updatedTask = await getTaskById(id);
       if (updatedTask != null) {
-        // Notificar a los clientes sobre la tarea actualizada
-        _wsService.notifyTopic(
-          WebSocketService.TOPIC_TASKS,
-          {
-            'action': 'update',
-            'entity': 'task',
-            'task': updatedTask.toMap(),
-            'updated_by': updatedBy
-          }
+        // Notificar a los clientes sobre la tarea actualizada usando el servicio centralizado
+        _notificationService.notifyTaskUpdate(
+          action: 'update',
+          taskData: updatedTask.toMap(),
+          updatedBy: updatedBy
         );
       }
       
@@ -418,14 +407,10 @@ class TasksService {
         {'id': id},
       );
       
-      // Notificar a los clientes que la tarea ha sido eliminada
-      _wsService.notifyTopic(
-        WebSocketService.TOPIC_TASKS,
-        {
-          'action': 'delete',
-          'entity': 'task',
-          'task_id': id
-        }
+      // Notificar a los clientes que la tarea ha sido eliminada usando el servicio centralizado
+      _notificationService.notifyTaskUpdate(
+        action: 'delete',
+        taskId: id
       );
       
       return true;
@@ -458,15 +443,11 @@ class TasksService {
       // Obtener la tarea actualizada para la notificación
       final updatedTask = await getTaskById(taskId);
       if (updatedTask != null) {
-        // Notificar a los clientes sobre la asignación de tarea
-        _wsService.notifyTopic(
-          WebSocketService.TOPIC_TASKS,
-          {
-            'action': 'assign',
-            'entity': 'task',
-            'task': updatedTask.toMap(),
-            'assigned_user_ids': userIds
-          }
+        // Notificar a los clientes sobre la asignación de tarea usando el servicio centralizado
+        _notificationService.notifyTaskUpdate(
+          action: 'assign',
+          taskData: updatedTask.toMap(),
+          assignedUserIds: userIds
         );
       }
       

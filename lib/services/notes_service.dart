@@ -3,12 +3,14 @@ import 'package:logging/logging.dart';
 import '../models/note_model.dart';
 import 'database_service.dart';
 import 'websocket_service.dart';
+import 'notification_service.dart';
 
 /// Servicio para manejar operaciones relacionadas con notas
 class NotesService {
   final _logger = Logger('NotesService');
   final _dbService = DatabaseService();
   final _wsService = WebSocketService();
+  final _notificationService = NotificationService();
 
   /// Obtiene todas las notas para una casa
   Future<List<NoteModel>> getNotesForHouse(int houseId) async {
@@ -154,19 +156,15 @@ class NotesService {
           houseType = houseResults.first['houses']!['type'] as String;
         }
         
-        // Notificar a los clientes sobre la nueva nota
-        _wsService.notifyTopic(
-          WebSocketService.TOPIC_NOTES,
-          {
-            'action': 'create',
-            'entity': 'note',
-            'note': {
-              ...newNote.toMap(),
-              'house_name': houseName,
-              'house_type': houseType,
-            },
-            'created_by': createdBy
-          }
+        // Notificar a los clientes sobre la nueva nota usando el servicio centralizado
+        _notificationService.notifyNoteUpdate(
+          action: 'create',
+          noteData: {
+            ...newNote.toMap(),
+            'house_name': houseName,
+            'house_type': houseType,
+          },
+          createdBy: createdBy
         );
         
         return newNote;
@@ -232,16 +230,11 @@ class NotesService {
           // Confirmar la transacción
           await _dbService.connection.execute('COMMIT');
           
-          // Notificar a los clientes sobre la eliminación de la nota
-          _wsService.notifyTopic(
-            WebSocketService.TOPIC_NOTES,
-            {
-              'action': 'delete',
-              'entity': 'note',
-              'note_id': noteId,
-              'house_id': noteData['house_id'],
-              'deleted_at': DateTime.now().toUtc().toIso8601String()
-            }
+          // Notificar a los clientes sobre la eliminación de la nota usando el servicio centralizado
+          _notificationService.notifyNoteUpdate(
+            action: 'delete',
+            noteId: noteId,
+            houseId: noteData['house_id'],
           );
           
           return true;

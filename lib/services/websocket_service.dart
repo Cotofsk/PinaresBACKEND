@@ -105,10 +105,14 @@ class WebSocketService {
   /// Envía una notificación a todos los clientes suscritos a un tópico específico
   void notifyTopic(String topic, Map<String, dynamic> data) {
     if (!_topicSubscriptions.containsKey(topic)) {
+      _logger.warning('No hay clientes suscritos al tópico $topic');
       return;
     }
     
-    final payload = {
+    final subscriberCount = _topicSubscriptions[topic]!.length;
+    _logger.info('Enviando notificación a $subscriberCount clientes suscritos al tópico $topic');
+    
+    final payload = <String, dynamic>{
       'type': 'notification',
       'topic': topic,
       'data': data,
@@ -122,13 +126,17 @@ class WebSocketService {
         try {
           _connections[connectionId]!.sink.add(jsonEncode(payload));
           sentCount++;
+          _logger.info('Notificación enviada a cliente $connectionId para tópico $topic');
         } catch (e) {
           _logger.warning('Error al notificar a cliente $connectionId: $e');
         }
+      } else {
+        _logger.warning('Cliente $connectionId ya no está conectado, eliminando de suscripciones');
+        _topicSubscriptions[topic]!.remove(connectionId);
       }
     }
     
-    _logger.info('Notificación enviada a $sentCount clientes para el tópico $topic');
+    _logger.info('Notificación enviada a $sentCount de $subscriberCount clientes para el tópico $topic');
   }
   
   /// Define constantes para los tópicos comunes

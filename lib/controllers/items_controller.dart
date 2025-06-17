@@ -4,12 +4,14 @@ import 'package:shelf/shelf.dart';
 
 import '../services/items_service.dart';
 import '../services/websocket_service.dart';
+import '../services/notification_service.dart';
 
 /// Controlador para manejar operaciones relacionadas con items
 class ItemsController {
   final _logger = Logger('ItemsController');
   final _itemsService = ItemsService();
   final _wsService = WebSocketService();
+  final _notificationService = NotificationService();
 
   /// Obtiene todos los items para un espacio específico
   Future<Response> getItemsBySpaceId(Request request, String spaceId) async {
@@ -91,16 +93,18 @@ class ItemsController {
       
       _logger.info('Item creado por $userName: ${item.name} (ID: ${item.id})');
       
-      // Enviar notificación WebSocket
-      _wsService.notifyTopic(WebSocketService.TOPIC_INVENTORY, {
-        'action': 'create',
-        'space_id': spaceIdInt,
-        'item_id': item.id,
-        'item_name': item.name,
-        'expected_quantity': item.expectedQuantity,
-        'created_by': userName,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      // Enviar notificación WebSocket usando el servicio centralizado
+      _notificationService.notifyInventoryUpdate(
+        action: 'create',
+        spaceId: spaceIdInt,
+        itemId: item.id,
+        itemName: item.name,
+        expectedQuantity: item.expectedQuantity,
+        createdBy: userName
+      );
+      
+      // Registrar en el log el envío de la notificación
+      _logger.info('Notificación WebSocket enviada para nuevo ítem ${item.id} en espacio $spaceIdInt');
       
       return Response.ok(
         jsonEncode({'item': item.toMap()}),
@@ -175,16 +179,15 @@ class ItemsController {
       
       _logger.info('Item actualizado por $userName: ${item.name} (ID: ${item.id})');
       
-      // Enviar notificación WebSocket
-      _wsService.notifyTopic(WebSocketService.TOPIC_INVENTORY, {
-        'action': 'update',
-        'space_id': originalItem.spaceId,
-        'item_id': item.id,
-        'item_name': item.name,
-        'expected_quantity': item.expectedQuantity,
-        'updated_by': userName,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      // Enviar notificación WebSocket usando el servicio centralizado
+      _notificationService.notifyInventoryUpdate(
+        action: 'update',
+        spaceId: originalItem.spaceId,
+        itemId: item.id,
+        itemName: item.name,
+        expectedQuantity: item.expectedQuantity,
+        updatedBy: userName
+      );
       
       return Response.ok(
         jsonEncode({'item': item.toMap()}),
@@ -192,7 +195,7 @@ class ItemsController {
     } catch (e, stackTrace) {
       _logger.severe('Error al actualizar item', e, stackTrace);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Error al actualizar el item'}),
+        body: jsonEncode({'error': 'Error al actualizar item'}),
         headers: {'content-type': 'application/json'});
     }
   }
@@ -239,14 +242,13 @@ class ItemsController {
       
       _logger.info('Item eliminado por $userName: ID $itemId');
       
-      // Enviar notificación WebSocket
-      _wsService.notifyTopic(WebSocketService.TOPIC_INVENTORY, {
-        'action': 'delete',
-        'space_id': originalItem.spaceId,
-        'item_id': itemId,
-        'deleted_by': userName,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      // Enviar notificación WebSocket usando el servicio centralizado
+      _notificationService.notifyInventoryUpdate(
+        action: 'delete',
+        spaceId: originalItem.spaceId,
+        itemId: itemId,
+        deletedBy: userName
+      );
       
       return Response.ok(
         jsonEncode({'success': true}),
@@ -254,7 +256,7 @@ class ItemsController {
     } catch (e, stackTrace) {
       _logger.severe('Error al eliminar item', e, stackTrace);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Error al eliminar el item'}),
+        body: jsonEncode({'error': 'Error al eliminar item'}),
         headers: {'content-type': 'application/json'});
     }
   }

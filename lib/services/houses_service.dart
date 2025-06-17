@@ -3,12 +3,14 @@ import 'package:logging/logging.dart';
 import '../models/house_model.dart';
 import 'database_service.dart';
 import 'websocket_service.dart';
+import 'notification_service.dart';
 
 /// Servicio para manejar operaciones relacionadas con casas
 class HousesService {
   final _logger = Logger('HousesService');
   final _dbService = DatabaseService();
   final _wsService = WebSocketService();
+  final _notificationService = NotificationService();
 
   /// Obtiene todas las casas
   Future<List<HouseModel>> getAllHouses() async {
@@ -78,16 +80,12 @@ class HousesService {
       // Obtener la casa actualizada para enviarla en la notificación
       final updatedHouse = await getHouseById(houseId);
       if (updatedHouse != null) {
-        // Notificar a los clientes suscritos al tópico de casas
-        _wsService.notifyTopic(
-          WebSocketService.TOPIC_HOUSES, 
-          {
-            'action': 'update',
-            'entity': 'house',
-            'id': houseId,
-            'house': updatedHouse.toMap(),
-            'changes': {'status': status}
-          }
+        // Notificar a los clientes suscritos al tópico de casas usando el servicio centralizado
+        _notificationService.notifyHouseUpdate(
+          houseId: houseId,
+          action: 'update',
+          houseData: updatedHouse.toMap(),
+          changes: {'status': status}
         );
       }
       
@@ -115,16 +113,12 @@ class HousesService {
       // Obtener la casa actualizada para enviarla en la notificación
       final updatedHouse = await getHouseById(houseId);
       if (updatedHouse != null) {
-        // Notificar a los clientes suscritos al tópico de casas
-        _wsService.notifyTopic(
-          WebSocketService.TOPIC_HOUSES, 
-          {
-            'action': 'update',
-            'entity': 'house',
-            'id': houseId,
-            'house': updatedHouse.toMap(),
-            'changes': {'checks': checks}
-          }
+        // Notificar a los clientes suscritos al tópico de casas usando el servicio centralizado
+        _notificationService.notifyHouseUpdate(
+          houseId: houseId,
+          action: 'update',
+          houseData: updatedHouse.toMap(),
+          changes: {'checks': checks}
         );
       }
       
