@@ -113,6 +113,7 @@ class NotesService {
     required String area,
     required String content,
     required String createdBy,
+    String? sourceClientId,
   }) async {
     try {
       return await _dbService.executeWithRetry(() async {
@@ -164,7 +165,8 @@ class NotesService {
             'house_name': houseName,
             'house_type': houseType,
           },
-          createdBy: createdBy
+          createdBy: createdBy,
+          sourceClientId: sourceClientId,
         );
         
         return newNote;

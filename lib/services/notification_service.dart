@@ -67,6 +67,7 @@ class NotificationService {
     Map<String, dynamic>? noteData,
     String? createdBy,
     String? deletedBy,
+    String? sourceClientId,
   }) {
     final payload = <String, dynamic>{
       'action': action,
@@ -92,6 +93,11 @@ class NotificationService {
 
     if (deletedBy != null) {
       payload['deleted_by'] = deletedBy;
+    }
+    
+    // Añadir sourceClientId si está disponible para que los clientes puedan filtrar notificaciones propias
+    if (sourceClientId != null) {
+      payload['sourceClientId'] = sourceClientId;
     }
 
     _wsService.notifyTopic(WebSocketService.TOPIC_NOTES, payload);

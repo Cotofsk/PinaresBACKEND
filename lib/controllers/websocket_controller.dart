@@ -129,6 +129,12 @@ class WebSocketController {
         payload['timestamp'] = DateTime.now().toIso8601String();
       }
       
+      // Asegurarse de que el sourceClientId se mantenga si está presente
+      final String? sourceClientId = payload['sourceClientId'] as String?;
+      if (sourceClientId != null) {
+        _logger.info('Notificación enviada desde client $sourceClientId');
+      }
+      
       // Enviar la notificación a todos los clientes suscritos al tópico usando el servicio centralizado
       _logger.info('Usuario $userName enviando notificación a tópico $topic: ${jsonEncode(payload)}');
       _notificationService.notifyCustom(topic, payload);

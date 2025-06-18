@@ -122,6 +122,10 @@ class NotesController {
       final String area = data['area'];
       final String content = data['content'];
       
+      // Extraer sourceClientId para evitar duplicaciones en el cliente
+      final String? sourceClientId = data['sourceClientId'];
+      _logger.info('SourceClientId recibido: $sourceClientId');
+      
       // Validar categoría
       if (!['grave', 'moderado', 'leve'].contains(category)) {
         return Response(400, 
@@ -144,6 +148,7 @@ class NotesController {
         area: area,
         content: content,
         createdBy: userName,
+        sourceClientId: sourceClientId,
       );
       
       if (note == null) {

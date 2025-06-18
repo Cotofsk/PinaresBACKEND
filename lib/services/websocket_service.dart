@@ -19,6 +19,14 @@ class WebSocketService {
   // La clave es un identificador único de la conexión
   final Map<String, WebSocketChannel> _connections = {};
   
+  // Map para relacionar clientIds con connectionIds
+  // Estructura: Map<clientId, connectionId>
+  final Map<String, String> _clientIdToConnectionId = {};
+  
+  // Map inverso para búsqueda rápida
+  // Estructura: Map<connectionId, clientId>
+  final Map<String, String> _connectionIdToClientId = {};
+  
   // Canales temáticos para los diferentes tipos de eventos
   // Estructura: Map<topic, List<connectionId>>
   final Map<String, List<String>> _topicSubscriptions = {};
@@ -41,6 +49,13 @@ class WebSocketService {
     );
   }
   
+  /// Registra asociación entre clientId y connectionId
+  void registerClientId(String connectionId, String clientId) {
+    _clientIdToConnectionId[clientId] = connectionId;
+    _connectionIdToClientId[connectionId] = clientId;
+    _logger.info('Asociado clientId $clientId a connectionId $connectionId');
+  }
+  
   /// Maneja los mensajes recibidos desde el cliente
   void _handleClientMessage(String connectionId, dynamic message) {
     try {
@@ -52,6 +67,16 @@ class WebSocketService {
         _handleUnsubscription(connectionId, data['topic']);
       } else if (data['type'] == 'ping') {
         _sendToConnection(connectionId, {'type': 'pong', 'timestamp': DateTime.now().toIso8601String()});
+      } else if (data['type'] == 'identify' && data.containsKey('clientId')) {
+        // Registrar el clientId asociado a esta conexión
+        final clientId = data['clientId'];
+        registerClientId(connectionId, clientId);
+        _sendToConnection(connectionId, {
+          'type': 'identity_confirmed', 
+          'clientId': clientId,
+          'timestamp': DateTime.now().toIso8601String()
+        });
+        _logger.info('Cliente $connectionId identificado como clientId: $clientId');
       }
     } catch (e) {
       _logger.warning('Error al procesar mensaje del cliente: $e');
@@ -82,6 +107,13 @@ class WebSocketService {
   void _handleConnectionClosed(String connectionId) {
     // Eliminar la conexión
     _connections.remove(connectionId);
+    
+    // Eliminar asociaciones de clientId si existen
+    final clientId = _connectionIdToClientId[connectionId];
+    if (clientId != null) {
+      _clientIdToConnectionId.remove(clientId);
+      _connectionIdToClientId.remove(connectionId);
+    }
     
     // Eliminar de todas las suscripciones
     for (final topic in _topicSubscriptions.keys) {
@@ -121,8 +153,28 @@ class WebSocketService {
     
     int sentCount = 0;
     
+    // Verificar si hay un sourceClientId en los datos
+    String? sourceClientId;
+    if (data.containsKey('sourceClientId')) {
+      sourceClientId = data['sourceClientId'];
+      _logger.info('Detectado sourceClientId $sourceClientId - excluyendo al cliente originador');
+    }
+    
     for (final connectionId in _topicSubscriptions[topic]!) {
-      if (_connections.containsKey(connectionId)) {
+      // Si hay un sourceClientId en los datos y coincide con el clientId asociado a esta conexión,
+      // no enviar la notificación a ese cliente para evitar duplicados
+      bool skipConnection = false;
+      
+      if (sourceClientId != null) {
+        // Obtener el clientId asociado a esta conexión
+        final connectionClientId = _connectionIdToClientId[connectionId];
+        if (connectionClientId != null && connectionClientId == sourceClientId) {
+          _logger.info('Omitiendo envío a cliente originador $connectionId con clientId $sourceClientId');
+          skipConnection = true;
+        }
+      }
+      
+      if (!skipConnection && _connections.containsKey(connectionId)) {
         try {
           _connections[connectionId]!.sink.add(jsonEncode(payload));
           sentCount++;
@@ -130,7 +182,7 @@ class WebSocketService {
         } catch (e) {
           _logger.warning('Error al notificar a cliente $connectionId: $e');
         }
-      } else {
+      } else if (!_connections.containsKey(connectionId)) {
         _logger.warning('Cliente $connectionId ya no está conectado, eliminando de suscripciones');
         _topicSubscriptions[topic]!.remove(connectionId);
       }
