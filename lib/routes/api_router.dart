@@ -73,6 +73,10 @@ Router createApiRouter() {
     tasksController.deleteTask(request, request.params['id'] ?? '')));
   router.post('/api/tasks/<id>/assign', authMiddleware.authenticate((request) =>
     tasksController.assignTask(request, request.params['id'] ?? '')));
+  router.get('/api/tasks/<id>', authMiddleware.authenticate((request) =>
+    tasksController.getTaskById(request, request.params['id'] ?? '')));
+  router.get('/api/tasks/<id>/users', authMiddleware.authenticate((request) =>
+    tasksController.getTaskUsers(request, request.params['id'] ?? '')));
   
   // Usuarios
   router.get('/api/users', authMiddleware.authenticate(usersController.getAllUsers));

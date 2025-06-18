@@ -15,63 +15,56 @@ class TasksService {
   /// Obtiene una tarea por ID
   Future<Task?> getTaskById(int taskId) async {
     try {
-      // Primero buscar en la tabla tareas
-      var taskResult = await _dbService.query(
+      // Obtener datos de la tarea
+      final taskResult = await _dbService.query(
         'SELECT * FROM tareas WHERE id = @id',
         {'id': taskId},
       );
       
-      // Si no se encuentra en tareas, buscar en tareas_completadas
       if (taskResult.isEmpty) {
-        taskResult = await _dbService.query(
-          'SELECT * FROM tareas_completadas WHERE id = @id',
-          {'id': taskId},
-        );
-        
-        if (taskResult.isEmpty) {
-          _logger.warning('No se encontró la tarea con ID $taskId en ninguna tabla');
-          return null;
-        }
+        _logger.warning('No se encontró la tarea con ID $taskId');
+        return null;
       }
       
-      final taskRow = taskResult.first;
-      
-      // Obtener los usuarios asignados a esta tarea
-      final usersResult = await _dbService.query(
-        '''
-        SELECT u.id, u.nombre, u.codigo, u.rol
-        FROM tareas_usuarios tu
-        JOIN accesos u ON tu.id_usuario = u.id
-        WHERE tu.id_tarea = @id_tarea
-        ''',
-        {'id_tarea': taskId},
+      // Obtener la casa asociada
+      final houseResult = await _dbService.query(
+        'SELECT name, type FROM houses WHERE id = @id',
+        {'id': taskResult.first['id_casa']},
       );
       
-      // Crear lista de nombres de usuarios asignados
-      final assignedUserNames = usersResult.map((u) => u['nombre'] as String).toList();
-      final assignedUserIds = usersResult.map((u) => u['id'] as int).toList();
+      // Obtener usuarios asignados
+      final usersResult = await getTaskUsers(taskId);
       
-      // Combinar nombre de usuarios si hay varios
-      final assignedTo = assignedUserNames.isNotEmpty ? assignedUserNames.join(', ') : null;
+      // Registrar información de usuarios encontrados
+      _logger.info('👥 Usuarios encontrados para tarea $taskId: ${usersResult.length}');
+      for (final user in usersResult) {
+        _logger.info('👤 - Usuario: ${user['nombre']} (ID: ${user['id']})');
+      }
       
-      return Task.fromMap({
-        'id': taskRow['id'],
-        'title': taskRow['tipo'],
-        'description': taskRow['tipo'],
+      // Extraer IDs y nombres de usuarios
+      final assignedUserIds = usersResult.map<int>((user) => user['id'] as int).toList();
+      final assignedUserNames = usersResult.map<String>((user) => user['nombre'] as String).toList();
+      
+      // Crear objeto de tarea con todos los datos
+      final task = Task.fromMap({
+        'id': taskResult.first['id'],
+        'title': taskResult.first['tipo'],
+        'description': taskResult.first['tipo'],
         'priority': 1,
-        'status': taskRow['estado'] ?? 'completada',
-        'house_id': taskRow['id_casa'],
-        'assigned_to': assignedTo,
+        'status': taskResult.first['estado'],
+        'house_id': taskResult.first['id_casa'],
+        'house_name': houseResult.isNotEmpty ? houseResult.first['name'] : null,
+        'house_type': houseResult.isNotEmpty ? houseResult.first['type'] : null,
+        'assigned_to': usersResult.isNotEmpty ? usersResult.map((u) => u['nombre']).join(', ') : null,
         'assigned_user_ids': assignedUserIds,
         'assigned_user_names': assignedUserNames,
-        'due_date': taskRow['fecha_finalizacion']?.toString(),
-        'created_at': taskRow['fecha_creacion']?.toString(),
-        'updated_at': taskRow['fecha_creacion']?.toString(),
-        'created_by': '',
-        'updated_by': '',
+        'created_at': taskResult.first['fecha_creacion']?.toString(),
+        'updated_at': null,
       });
+      
+      return task;
     } catch (e, stackTrace) {
-      _logger.severe('Error al obtener tarea con ID $taskId', e, stackTrace);
+      _logger.severe('Error al obtener tarea por ID', e, stackTrace);
       return null;
     }
   }
@@ -255,9 +248,11 @@ class TasksService {
     required String updatedBy,
   }) async {
     try {
-      // Si el estado es "completada", mover a tareas_completadas
+      // Si el estado es "completada", mover a tareas_completadas usando una transacción
       if (status == 'completada') {
-        // Obtener la tarea actual
+        final now = DateTime.now().toIso8601String();
+        
+        // Obtener la tarea actual antes de iniciar la transacción
         final taskResult = await _dbService.query(
           'SELECT * FROM tareas WHERE id = @id',
           {'id': id},
@@ -269,72 +264,80 @@ class TasksService {
         }
         
         final taskData = taskResult.first;
-        final now = DateTime.now().toIso8601String();
         
-        // Si la tarea es de tipo "limpiar", actualizar el estado de la casa a "clean"
-        if (taskData['tipo'].toString().toLowerCase().contains('limpiar')) {
-          await _dbService.execute(
-            'UPDATE houses SET status = @status WHERE id = @house_id',
-            {
-              'status': 'clean',
-              'house_id': taskData['id_casa'],
-            },
-          );
-          
-          // Notificar actualización de estado de la casa
-          _wsService.notifyTopic(
-            WebSocketService.TOPIC_HOUSES,
-            {
-              'action': 'update_status',
-              'house_id': taskData['id_casa'],
-              'status': 'clean',
-              'timestamp': now
+        // Usar una transacción para realizar todas las operaciones atómicamente
+        return await _dbService.connection.transaction((conn) async {
+          try {
+            // Si la tarea es de tipo "limpiar", actualizar el estado de la casa a "clean"
+            if (taskData['tipo'].toString().toLowerCase().contains('limpiar')) {
+              await conn.execute(
+                'UPDATE houses SET status = @status WHERE id = @house_id',
+                substitutionValues: {
+                  'status': 'clean',
+                  'house_id': taskData['id_casa'],
+                },
+              );
+              
+              // Notificar actualización de estado de la casa
+              _wsService.notifyTopic(
+                WebSocketService.TOPIC_HOUSES,
+                {
+                  'action': 'update_status',
+                  'house_id': taskData['id_casa'],
+                  'status': 'clean',
+                  'timestamp': now
+                }
+              );
             }
-          );
-        }
-        
-        // Insertar en tareas_completadas
-        await _dbService.execute(
-          '''
-          INSERT INTO tareas_completadas (
-            id, tipo, id_casa, estado, fecha_creacion, fecha_finalizacion
-          )
-          VALUES (
-            @id, @tipo, @id_casa, @estado, @fecha_creacion, @fecha_finalizacion
-          )
-          ''',
-          {
-            'id': id,
-            'tipo': taskData['tipo'],
-            'id_casa': taskData['id_casa'],
-            'estado': taskData['estado'] ?? 'completada',
-            'fecha_creacion': taskData['fecha_creacion'],
-            'fecha_finalizacion': now,
-          },
-        );
-        
-        // Eliminar de tareas
-        await _dbService.execute(
-          'DELETE FROM tareas WHERE id = @id',
-          {'id': id},
-        );
-        
-        // Eliminar relaciones con usuarios
-        await _dbService.execute(
-          'DELETE FROM tareas_usuarios WHERE id_tarea = @id_tarea',
-          {'id_tarea': id},
-        );
-        
-        // Notificar a los clientes que la tarea ha sido completada usando el servicio centralizado
-        _notificationService.notifyTaskUpdate(
-          action: 'complete',
-          taskId: id,
-          taskType: taskData['tipo'],
-          houseId: taskData['id_casa'],
-          completedBy: updatedBy
-        );
-        
-        return true;
+            
+            // Insertar en tareas_completadas
+            await conn.execute(
+              '''
+              INSERT INTO tareas_completadas (
+                id, tipo, id_casa, estado, fecha_creacion, fecha_finalizacion
+              )
+              VALUES (
+                @id, @tipo, @id_casa, @estado, @fecha_creacion, @fecha_finalizacion
+              )
+              ''',
+              substitutionValues: {
+                'id': id,
+                'tipo': taskData['tipo'],
+                'id_casa': taskData['id_casa'],
+                'estado': taskData['estado'] ?? 'completada',
+                'fecha_creacion': taskData['fecha_creacion'],
+                'fecha_finalizacion': now,
+              },
+            );
+            
+            // Eliminar relaciones con usuarios
+            await conn.execute(
+              'DELETE FROM tareas_usuarios WHERE id_tarea = @id_tarea',
+              substitutionValues: {'id_tarea': id},
+            );
+            
+            // Eliminar de tareas
+            await conn.execute(
+              'DELETE FROM tareas WHERE id = @id',
+              substitutionValues: {'id': id},
+            );
+            
+            // Notificar a los clientes que la tarea ha sido completada usando el servicio centralizado
+            _notificationService.notifyTaskUpdate(
+              action: 'complete',
+              taskId: id,
+              taskType: taskData['tipo'],
+              houseId: taskData['id_casa'],
+              completedBy: updatedBy
+            );
+            
+            return true;
+          } catch (e) {
+            _logger.severe('Error en transacción de completar tarea: $e');
+            // La transacción se revertirá automáticamente
+            rethrow;
+          }
+        });
       }
       
       // Si no es completada, actualizar los campos
@@ -455,6 +458,29 @@ class TasksService {
     } catch (e, stackTrace) {
       _logger.severe('Error al asignar tarea', e, stackTrace);
       return false;
+    }
+  }
+
+  /// Obtiene los usuarios asignados a una tarea
+  Future<List<Map<String, dynamic>>> getTaskUsers(int taskId) async {
+    try {
+      // Consulta para obtener los usuarios asignados a una tarea
+      final result = await _dbService.query(
+        '''
+        SELECT u.id, u.nombre, u.codigo, u.rol
+        FROM tareas_usuarios tu
+        JOIN accesos u ON tu.id_usuario = u.id
+        WHERE tu.id_tarea = @id_tarea
+        ''',
+        {'id_tarea': taskId},
+      );
+      
+      _logger.info('Obtenidos ${result.length} usuarios para la tarea $taskId');
+      
+      return result;
+    } catch (e, stackTrace) {
+      _logger.severe('Error al obtener usuarios de la tarea', e, stackTrace);
+      return [];
     }
   }
 } 

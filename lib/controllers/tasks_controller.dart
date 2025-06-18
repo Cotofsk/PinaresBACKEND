@@ -139,8 +139,6 @@ class TasksController {
       final String body = await request.readAsString();
       final Map<String, dynamic> data = jsonDecode(body);
       
-      _logger.info('Datos recibidos para actualizar tarea: $data');
-      
       // Verificar si se está cambiando el estado
       final newStatus = data['status'] ?? data['estado'];
       
@@ -170,16 +168,7 @@ class TasksController {
         if (data.containsKey('user_name') && task.assignedUserNames != null) {
           final userName = data['user_name'] as String;
           isAssignedByName = task.assignedUserNames!.contains(userName);
-          _logger.info('📋 Verificando asignación por nombre: $userName, Resultado: $isAssignedByName');
         }
-        
-        // Información de depuración
-        _logger.info('👤 Usuario: $userName (ID: $userId)');
-        _logger.info('🔑 Rol: $userRole, Permiso iniciar cualquier tarea: $canStartAnyTask');
-        _logger.info('📋 IDs asignados a tarea: ${task.assignedUserIds}');
-        _logger.info('📋 Nombres asignados a tarea: ${task.assignedUserNames}');
-        _logger.info('✅ Usuario asignado por ID: $isAssignedById');
-        _logger.info('✅ Usuario asignado por nombre: $isAssignedByName');
         
         // Puede iniciar la tarea si tiene permiso especial o está asignado (por ID o nombre)
         hasPermission = canStartAnyTask || isAssignedById || isAssignedByName;
@@ -187,17 +176,7 @@ class TasksController {
         if (!hasPermission) {
           return Response(403, 
             body: jsonEncode({
-              'error': 'No tiene permisos para iniciar esta tarea. Debe estar asignado a la tarea o tener permisos especiales.',
-              'details': {
-                'userId': userId,
-                'userName': data['user_name'],
-                'taskId': taskId,
-                'assignedUserIds': task.assignedUserIds,
-                'assignedUserNames': task.assignedUserNames,
-                'canStartAnyTask': canStartAnyTask,
-                'isAssignedById': isAssignedById,
-                'isAssignedByName': isAssignedByName
-              }
+              'error': 'No tiene permisos para iniciar esta tarea. Debe estar asignado a la tarea o tener permisos especiales.'
             }),
             headers: {'content-type': 'application/json'});
         }
@@ -263,8 +242,7 @@ class TasksController {
         );
       }
       
-      _logger.info('Tarea $taskId actualizada por $userName');
-      
+      // Responder inmediatamente sin esperar a obtener la tarea actualizada
       return Response.ok(
         jsonEncode({
           'success': true,
@@ -328,6 +306,87 @@ class TasksController {
       _logger.severe('Error al eliminar tarea', e, stackTrace);
       return Response.internalServerError(
         body: jsonEncode({'error': 'Error al eliminar tarea'}),
+        headers: {'content-type': 'application/json'}
+      );
+    }
+  }
+
+  /// Obtener una tarea por ID
+  Future<Response> getTaskById(Request request, String id) async {
+    try {
+      final taskId = int.tryParse(id);
+      if (taskId == null) {
+        return Response(400, 
+          body: jsonEncode({'error': 'ID de tarea inválido'}),
+          headers: {'content-type': 'application/json'});
+      }
+      
+      // Obtener la tarea
+      final task = await _tasksService.getTaskById(taskId);
+      
+      if (task == null) {
+        return Response.notFound(
+          jsonEncode({'error': 'Tarea no encontrada'}),
+          headers: {'content-type': 'application/json'}
+        );
+      }
+      
+      // Obtener los usuarios asignados a la tarea
+      final users = await _tasksService.getTaskUsers(taskId);
+      
+      // Agregar los usuarios a la respuesta
+      final taskMap = task.toMap();
+      taskMap['usuarios_ids'] = users.map((u) => u['id']).toList();
+      taskMap['usuarios_nombres'] = users.map((u) => u['nombre']).toList();
+      
+      return Response.ok(
+        jsonEncode(taskMap),
+        headers: {'content-type': 'application/json'}
+      );
+    } catch (e, stackTrace) {
+      _logger.severe('Error al obtener tarea por ID', e, stackTrace);
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Error al obtener tarea'}),
+        headers: {'content-type': 'application/json'}
+      );
+    }
+  }
+  
+  /// Obtiene los usuarios asignados a una tarea
+  Future<Response> getTaskUsers(Request request, String taskIdStr) async {
+    try {
+      final taskId = int.tryParse(taskIdStr);
+      if (taskId == null) {
+        return Response(400,
+          body: jsonEncode({'error': 'ID de tarea inválido'}),
+          headers: {'content-type': 'application/json'});
+      }
+      
+      // Obtener usuarios asignados a la tarea
+      final taskUsers = await _tasksService.getTaskUsers(taskId);
+      
+      _logger.info('👥 Obtenidos ${taskUsers.length} usuarios para tarea $taskId: $taskUsers');
+      
+      // Mapear los resultados a un formato más simple
+      final simplifiedUsers = taskUsers.map((user) => {
+        'id': user['id'],
+        'nombre': user['nombre'],
+        'codigo': user['codigo']
+      }).toList();
+      
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'task_id': taskId,
+          'usuarios': simplifiedUsers,
+          'count': simplifiedUsers.length
+        }),
+        headers: {'content-type': 'application/json'}
+      );
+    } catch (e, stackTrace) {
+      _logger.severe('Error al obtener usuarios de la tarea: $e', e, stackTrace);
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Error al obtener usuarios de la tarea'}),
         headers: {'content-type': 'application/json'}
       );
     }
