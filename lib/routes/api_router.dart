@@ -52,8 +52,8 @@ Router createApiRouter() {
     housesController.updateHouseStatus(request, request.params['id']!)));
   router.put('/api/houses/<id>/checks', authMiddleware.authenticate((request) => 
     housesController.updateHouseChecks(request, request.params['id']!)));
-  router.put('/api/houses/<id>/dates', authMiddleware.authenticate((request) => 
-    housesController.updateHouseDates(request, request.params['id']!)));
+  router.put('/api/houses/<houseId>/dates', authMiddleware.authenticate((request) => 
+    housesController.updateHouseDates(request, request.params['houseId']!)));
   
   // Notas
   router.get('/api/houses/<houseId>/notes', authMiddleware.authenticate((request) => 
