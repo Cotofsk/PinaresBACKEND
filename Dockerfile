@@ -1,37 +1,37 @@
-# ===============================
-# STAGE 1 — Build
-# ===============================
 FROM dart:stable AS build
 
-ARG CACHEBUST=1
-RUN echo "Cache bust -> $CACHEBUST"
-
+# Establecer directorio de trabajo
 WORKDIR /app
 
-COPY pubspec.yaml pubspec.lock ./
+# Copiar archivos de dependencias
+COPY pubspec.* ./
 RUN dart pub get
 
+# Copiar el resto del código
 COPY . .
+
+# Obtener dependencias
 RUN dart pub get --offline
 
-RUN rm -f bin/server
+# Compilar para producción
 RUN dart compile exe bin/server.dart -o bin/server
 
-# ===============================
-# STAGE 2 — Runtime
-# ===============================
+# Imagen de producción
 FROM debian:bullseye-slim
 
+# Instalar dependencias de SSL
+RUN apt-get update && \
+    apt-get install -y ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Establecer directorio de trabajo
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+# Copiar el ejecutable compilado
+COPY --from=build /app/bin/server /app/bin/server
 
-# Copiamos el binario A /app/server
-COPY --from=build /app/bin/server /app/server
-
-ENV PORT=8080
+# Exponer puerto
 EXPOSE 8080
 
-CMD ["./server"]
+# Comando para iniciar el servidor
+CMD ["/app/bin/server"] 
