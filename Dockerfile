@@ -1,37 +1,19 @@
-FROM dart:stable AS build
+# Usa la imagen oficial de Dart
+FROM dart:stable
 
-# Establecer directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos de dependencias
-COPY pubspec.* ./
-RUN dart pub get
-
-# Copiar el resto del código
+# Copia todo
 COPY . .
 
-# Obtener dependencias
-RUN dart pub get --offline
+# Instala dependencias
+RUN dart pub get
 
-# Compilar para producción
+# Compila tu app (si aplica)
 RUN dart compile exe bin/server.dart -o bin/server
 
-# Imagen de producción
-FROM debian:bullseye-slim
-
-# Instalar dependencias de SSL
-RUN apt-get update && \
-    apt-get install -y ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# Establecer directorio de trabajo
-WORKDIR /app
-
-# Copiar el ejecutable compilado
-COPY --from=build /app/bin/server /app/bin/server
-
-# Exponer puerto
+# Exponer el puerto (normalmente 8080)
 EXPOSE 8080
 
-# Comando para iniciar el servidor
-CMD ["/app/bin/server"] 
+# Comando de inicio
+CMD ["./bin/server"]
