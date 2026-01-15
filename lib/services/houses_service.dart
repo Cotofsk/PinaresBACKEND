@@ -127,5 +127,47 @@ class HousesService {
       _logger.severe('Error al actualizar los checks de la casa: $e');
       return false;
     }
+      return true;
+    } catch (e) {
+      _logger.severe('Error al actualizar los checks de la casa: $e');
+      return false;
+    }
+  }
+
+  /// Actualiza las fechas de reserva de una casa
+  Future<bool> updateHouseBooking(int houseId, DateTime? checkIn, DateTime? checkOut) async {
+    try {
+      await _dbService.executeWithRetry(() async {
+        await _dbService.connection.execute(
+          'UPDATE houses SET check_in_date = @checkIn, check_out_date = @checkOut '
+          'WHERE id = @id',
+          substitutionValues: {
+            'id': houseId,
+            'checkIn': checkIn, // El driver de postgres debería manejar DateTime -> DATE
+            'checkOut': checkOut,
+          },
+        );
+      });
+      
+      // Notificar actualización
+      final updatedHouse = await getHouseById(houseId);
+      if (updatedHouse != null) {
+        _notificationService.notifyHouseUpdate(
+          houseId: houseId,
+          action: 'update',
+          houseData: updatedHouse.toMap(),
+          changes: {
+            'check_in_date': checkIn?.toIso8601String(), 
+            'check_out_date': checkOut?.toIso8601String(),
+            'computed_checks': updatedHouse.computedChecks.dbValue // Notificamos el nuevo estado calculado
+          }
+        );
+      }
+      
+      return true;
+    } catch (e) {
+      _logger.severe('Error al actualizar fechas de reserva: $e');
+      return false;
+    }
   }
 } 
