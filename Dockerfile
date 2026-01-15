@@ -43,4 +43,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Ejecutamos el server
-CMD ["./serv]()
+CMD ["./server"]
