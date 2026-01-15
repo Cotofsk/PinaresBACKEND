@@ -123,10 +123,6 @@ class HousesService {
       }
       
       return true;
-    } catch (e) {
-      _logger.severe('Error al actualizar los checks de la casa: $e');
-      return false;
-    }
       return true;
     } catch (e) {
       _logger.severe('Error al actualizar los checks de la casa: $e');
