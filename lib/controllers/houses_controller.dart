@@ -184,8 +184,8 @@ class HousesController {
     }
   }
 
-  /// Actualiza las fechas de reserva (Booking)
-  Future<Response> updateHouseBooking(Request request, String id) async {
+  /// Actualiza las fechas de check-in/check-out de una casa
+  Future<Response> updateHouseDates(Request request, String id) async {
     try {
       final houseId = int.tryParse(id);
       if (houseId == null) {
@@ -194,52 +194,50 @@ class HousesController {
           headers: {'content-type': 'application/json'});
       }
       
+      // Obtener el usuario del contexto
       final userName = request.context['userName'] as String;
+      
+      // Leer el cuerpo de la solicitud
       final String body = await request.readAsString();
       final Map<String, dynamic> data = jsonDecode(body);
       
-      // Permitimos null para borrar fechas
-      DateTime? checkIn;
-      DateTime? checkOut;
-
-      if (data['checkIn'] != null) {
-        checkIn = DateTime.tryParse(data['checkIn'].toString());
+      // Parsear fechas (pueden ser null)
+      DateTime? checkInDate;
+      DateTime? checkOutDate;
+      
+      if (data.containsKey('check_in_date') && data['check_in_date'] != null) {
+        checkInDate = DateTime.parse(data['check_in_date']);
       }
-      if (data['checkOut'] != null) {
-        checkOut = DateTime.tryParse(data['checkOut'].toString());
+      
+      if (data.containsKey('check_out_date') && data['check_out_date'] != null) {
+        checkOutDate = DateTime.parse(data['check_out_date']);
       }
-
-      // Validación simple: Salida debe ser después de entrada
-      if (checkIn != null && checkOut != null && checkOut.isBefore(checkIn)) {
-         return Response(400, 
-          body: jsonEncode({'error': 'La fecha de salida no puede ser anterior a la de llegada'}),
-          headers: {'content-type': 'application/json'});
-      }
-
-      final success = await _housesService.updateHouseBooking(houseId, checkIn, checkOut);
+      
+      // Actualizar las fechas
+      final success = await _housesService.updateHouseDates(houseId, checkInDate, checkOutDate);
       
       if (!success) {
         return Response.internalServerError(
-          body: jsonEncode({'error': 'Error al actualizar fechas'}),
+          body: jsonEncode({'error': 'Error al actualizar las fechas de la casa'}),
           headers: {'content-type': 'application/json'}
         );
       }
       
-      _logger.info('Casa $houseId fechas actualizadas por $userName: IN:$checkIn OUT:$checkOut');
+      _logger.info('Casa $houseId fechas actualizadas por $userName');
       
       return Response.ok(
         jsonEncode({
           'success': true,
-          'message': 'Reserva actualizada correctamente',
+          'message': 'Fechas actualizadas correctamente',
         }),
         headers: {'content-type': 'application/json'}
       );
     } catch (e, stackTrace) {
-      _logger.severe('Error al actualizar reserva', e, stackTrace);
+      _logger.severe('Error al actualizar fechas de casa', e, stackTrace);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Error interno al actualizar reserva'}),
+        body: jsonEncode({'error': 'Error al actualizar fechas de casa'}),
         headers: {'content-type': 'application/json'}
       );
     }
   }
-} 
+}

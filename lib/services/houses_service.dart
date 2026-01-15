@@ -123,47 +123,46 @@ class HousesService {
       }
       
       return true;
-      return true;
     } catch (e) {
       _logger.severe('Error al actualizar los checks de la casa: $e');
       return false;
     }
   }
 
-  /// Actualiza las fechas de reserva de una casa
-  Future<bool> updateHouseBooking(int houseId, DateTime? checkIn, DateTime? checkOut) async {
+  /// Actualiza las fechas de check-in/check-out de una casa
+  Future<bool> updateHouseDates(int houseId, DateTime? checkInDate, DateTime? checkOutDate) async {
     try {
       await _dbService.executeWithRetry(() async {
         await _dbService.connection.execute(
-          'UPDATE houses SET check_in_date = @checkIn, check_out_date = @checkOut '
+          'UPDATE houses SET check_in_date = @check_in_date, check_out_date = @check_out_date '
           'WHERE id = @id',
           substitutionValues: {
             'id': houseId,
-            'checkIn': checkIn, // El driver de postgres debería manejar DateTime -> DATE
-            'checkOut': checkOut,
+            'check_in_date': checkInDate,
+            'check_out_date': checkOutDate,
           },
         );
       });
       
-      // Notificar actualización
+      // Obtener la casa actualizada para enviarla en la notificación
       final updatedHouse = await getHouseById(houseId);
       if (updatedHouse != null) {
+        // Notificar a los clientes suscritos
         _notificationService.notifyHouseUpdate(
           houseId: houseId,
           action: 'update',
           houseData: updatedHouse.toMap(),
           changes: {
-            'check_in_date': checkIn?.toIso8601String(), 
-            'check_out_date': checkOut?.toIso8601String(),
-            'computed_checks': updatedHouse.computedChecks.dbValue // Notificamos el nuevo estado calculado
+            'check_in_date': checkInDate?.toIso8601String(),
+            'check_out_date': checkOutDate?.toIso8601String()
           }
         );
       }
       
       return true;
     } catch (e) {
-      _logger.severe('Error al actualizar fechas de reserva: $e');
+      _logger.severe('Error al actualizar las fechas de la casa: $e');
       return false;
     }
   }
-} 
+}
