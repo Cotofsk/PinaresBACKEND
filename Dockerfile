@@ -1,46 +1,37 @@
-# ===============================
-# STAGE 1 — Build
-# ===============================
 FROM dart:stable AS build
 
-# 🔥 Cache bust manual (Railway-friendly)
-ARG CACHEBUST=1
-RUN echo "Cache bust -> $CACHEBUST"
-
+# Establecer directorio de trabajo
 WORKDIR /app
 
-# Copiamos pubspec primero para control de dependencias
-COPY pubspec.yaml pubspec.lock ./
+# Copiar archivos de dependencias
+COPY pubspec.* ./
 RUN dart pub get
 
-# Copiamos todo el código
+# Copiar el resto del código
 COPY . .
 
-# Asegura dependencias offline (pero después del COPY)
+# Obtener dependencias
 RUN dart pub get --offline
 
-# 💣 Forzar recompilación del binario SIEMPRE
-RUN rm -f bin/server
+# Compilar para producción
 RUN dart compile exe bin/server.dart -o bin/server
 
-# ===============================
-# STAGE 2 — Runtime
-# ===============================
-FROM debian:stable-slim
+# Imagen de producción
+FROM debian:bullseye-slim
 
+# Instalar dependencias de SSL
+RUN apt-get update && \
+    apt-get install -y ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Establecer directorio de trabajo
 WORKDIR /app
 
-# Certificados TLS (muy importante para APIs)
-RUN apt-get update \
-  && apt-get install -y ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+# Copiar el ejecutable compilado
+COPY --from=build /app/bin/server /app/bin/server
 
-# Copiamos SOLO el binario final
-COPY --from=build /app/bin/server /app/server
-
-# Railway usa la variable PORT
-ENV PORT=8080
+# Exponer puerto
 EXPOSE 8080
 
-# Ejecutamos el server
-CMD ["./server"]
+# Comando para iniciar el servidor
+CMD ["/app/bin/server"] 
