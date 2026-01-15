@@ -175,7 +175,6 @@ class HousesController {
         }),
         headers: {'content-type': 'application/json'}
       );
-      );
     } catch (e, stackTrace) {
       _logger.severe('Error al actualizar checks de casa', e, stackTrace);
       return Response.internalServerError(
