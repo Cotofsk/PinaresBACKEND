@@ -144,21 +144,6 @@ class HousesService {
         );
       });
       
-      // Obtener la casa actualizada para enviarla en la notificación
-      final updatedHouse = await getHouseById(houseId);
-      if (updatedHouse != null) {
-        // Notificar a los clientes suscritos
-        _notificationService.notifyHouseUpdate(
-          houseId: houseId,
-          action: 'update',
-          houseData: updatedHouse.toMap(),
-          changes: {
-            'check_in_date': checkInDate?.toIso8601String(),
-            'check_out_date': checkOutDate?.toIso8601String()
-          }
-        );
-      }
-      
       return true;
     } catch (e) {
       _logger.severe('Error al actualizar las fechas de la casa: $e');
